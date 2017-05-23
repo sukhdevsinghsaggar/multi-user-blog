@@ -6,6 +6,9 @@
   <div class = "well panel text-center">
   <div class="panel-heading"><h1> New Post </h1></div>
     <div class="panel-body">
+      <div style="margin-bottom:25px; color:red">
+      <h4>{{ error }}</h4>
+    </div>
         <form method = 'POST' class="form-horizontal">
             <div class="form-group">
               <label class="control-label col-sm-2 col-sm-offset-1" for="subject">Subject:</label>
@@ -18,7 +21,7 @@
               <div class="col-sm-7">
                 <textarea rows="10" class="form-control" id="content" placeholder="Enter content" name="content"></textarea>
               </div>
-            </div><br>  
+            </div><br>
             <div class="form-group">
               <div class="">
                 <button type="submit" class="btn btn-default">Submit</button>

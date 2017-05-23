@@ -14,7 +14,7 @@
             <div class="text-center">
                 <a href="/like/{{post.key().id()}}" class="btn"><i class="glyphicon glyphicon-thumbs-up"></i> {{post.postlike}}</a>
                 <a href="/unlike/{{post.key().id()}}" class="btn"><i class="glyphicon glyphicon-thumbs-down"></i></a>
-              <a href="blog/{{post.key().id()}}" class="btn"><i class="glyphicon glyphicon-comment"></i> {{post.postcomment}} </a>
+              <a href="/{{post.key().id()}}" class="btn"><i class="glyphicon glyphicon-comment"></i> {{post.postcomment}} </a>
                 <a href="/comment/{{post.key().id()}}" class="btn">Add Comment</a>
             </div>
           <div class="text-center">
@@ -22,14 +22,17 @@
                 <a href="/delete/{{post.key().id()}}" class="btn btn-default">Delete Post</a>
                 <a href="/edit/{{post.key().id()}}" class="btn btn-default">Edit Post </a>
             {% endif %}
+            <div style="margin-bottom:25px; color:red">
+            <h4>{{ error }}</h4>
+          </div>
           </div>
        </div>
 </div>
-</div>   
+</div>
 <br>
 <div class="col-sm-8 col-sm-offset-2 ">
   <div><h3>Comments: </h3></div>
-  
+
   {% if comment.count() != 0 %}
     {% for c in comment %}
     <div class="well body" style="min-height:75px !important">
