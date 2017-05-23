@@ -6,7 +6,7 @@ This project is a part of Full Stack Web Developer Nanodegree provided by Udacit
 This is a simple blog website where users can sign-up, login, add posts, add comments and like posts on the blog.
 
 ## Website Deployed Using Google Cloud Platform:
-http://blogger-website.appspot.com
+http://blogger-15.appspot.com
 
 
 ## Standard Python Libararies Used:
