@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="text-center"><h1> Post with maximum comments </h1></div><br><br>
+<div>
+      <div class="well media col-sm-10 col-sm-offset-1 ">
+  		<div class="media-body">
+<h4 class="text-center media-heading"><a href="/blog/view/{{post.key().id()}}">{{post.subject}}</a></h4>
+            <br><span><i class="glyphicon glyphicon-calendar"></i> {{post.created.strftime("%b %d, %Y")}} </span>
+            <span class="text-right pull-right">By {{post.postuser}}</span>
+            <br><hr>
+            <p style="margin-top:25px;min-height:100px">{{post.content | safe}}</p>
+            <hr>
+            <div class="text-center">
+                <a href="/like/{{post.key().id()}}" class="btn"><i class="glyphicon glyphicon-thumbs-up"></i> {{post.postlike}}</a>
+                <a href="/unlike/{{post.key().id()}}" class="btn"><i class="glyphicon glyphicon-thumbs-down"> </i></a>
+              <a href="blog/view/{{post.key().id()}}" class="btn"><i class="glyphicon glyphicon-comment"></i> {{post.postcomment}} </a>
+                <a href="/comment/{{post.key().id()}}" class="btn">Add Comment</a>
+            </div>
+            {% if uname == post.postuser %}
+                <a href="/blog/delete/{{post.key().id()}}" class="btn btn-default">delete post {{uname}} </a>
+                <a href="/blog/edit/{{post.key().id()}}" class="btn btn-default">edit post </a>
+          {% endif %}
+        </div>
+  </div>
+</div>
+{% endblock %}

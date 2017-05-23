@@ -1,0 +1,57 @@
+
+{% extends "base.html" %}
+{% block content %}
+
+<div>
+      <div class="well media col-sm-10 col-sm-offset-1 ">
+  		<div class="media-body">
+    		<h4 class="text-center media-heading"><a href="/blog/{{post.key().id()}}">{{post.subject}}</a></h4>
+            <br><span><i class="glyphicon glyphicon-calendar"></i> {{post.created.strftime("%b %d, %Y")}} </span>
+            <span class="text-right pull-right">By {{post.postuser}}</span>
+            <br><hr>
+            <p style="margin-top:25px;min-height:100px">{{post.content | safe}}</p>
+            <hr>
+            <div class="text-center">
+                <a href="/like/{{post.key().id()}}" class="btn"><i class="glyphicon glyphicon-thumbs-up"></i> {{post.postlike}}</a>
+                <a href="/unlike/{{post.key().id()}}" class="btn"><i class="glyphicon glyphicon-thumbs-down"></i></a>
+              <a href="blog/{{post.key().id()}}" class="btn"><i class="glyphicon glyphicon-comment"></i> {{post.postcomment}} </a>
+                <a href="/comment/{{post.key().id()}}" class="btn">Add Comment</a>
+            </div>
+          <div class="text-center">
+            {% if uname == post.postuser %}
+                <a href="/delete/{{post.key().id()}}" class="btn btn-default">Delete Post</a>
+                <a href="/edit/{{post.key().id()}}" class="btn btn-default">Edit Post </a>
+            {% endif %}
+          </div>
+       </div>
+</div>
+</div>   
+<br>
+<div class="col-sm-8 col-sm-offset-2 ">
+  <div><h3>Comments: </h3></div>
+  
+  {% if comment.count() != 0 %}
+    {% for c in comment %}
+    <div class="well body" style="min-height:75px !important">
+      <div class="message">
+        {% if uname and c.comment_user == uname %}
+        <span class="pull-right">
+        <a href="/ChangeComment/{{post.key().id()}}/{{c.key().id()}}" class="btn btn-default" > Edit Comment </a>
+        <a href="/DeleteComment/{{post.key().id()}}/{{c.key().id()}}" class="btn btn-default"> Delete Comment </a>
+        </span>
+        {% endif %}
+        <b>{{c.comment_user}}:</b>
+        {{c.comment}}
+      </div>
+  </div>
+      {% endfor %}
+  {% else %}
+  <div class="well">
+      <div class="message">
+        No comments for this post. Be the first one to comment!
+      </div>
+      </div>
+</div>
+ {% endif %}
+
+{% endblock %}
