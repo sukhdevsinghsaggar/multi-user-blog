@@ -181,6 +181,9 @@ class AddCommentToPost(BlogHandler):
     def get(self, post_id):
         key = db.Key.from_path('Post', int(post_id), parent=blog_key())
         post = db.get(key)
+        if not post:
+            self.error(404)
+            return
         if not self.user:
             self.redirect("/login")
         else:
@@ -197,15 +200,18 @@ class AddCommentToPost(BlogHandler):
             return
         comment = self.request.get('comment')
 
-        comment_post_id = int(post_id)
-        comment_user = self.user.name
-        post.postcomment = post.postcomment+1
-        post.put()
-        content = Comment(parent=key, comment=comment,
-                          comment_user=comment_user,
-                          comment_post_id=comment_post_id)
-        content.put()
-        self.redirect("/")
+        if comment:
+            comment_post_id = int(post_id)
+            comment_user = self.user.name
+            post.postcomment = post.postcomment+1
+            post.put()
+            content = Comment(parent=key, comment=comment,
+                              comment_user=comment_user,
+                              comment_post_id=comment_post_id)
+            content.put()
+            self.redirect('/%s' % int(post.key().id()))
+        else:
+            self.redirect("/")
 
 
 class ViewComment(BlogHandler):
@@ -214,6 +220,9 @@ class ViewComment(BlogHandler):
         post = db.get(key)
         comment = greetings = Comment.all().filter('comment_post_id =',
                                                    int(post_id))
+        if not post or not comment:
+            self.error(404)
+            return
         if not self.user:
             self.redirect("/login")
         else:
@@ -230,7 +239,7 @@ class NewPost(BlogHandler):
 
     def post(self):
         if not self.user:
-            self.redirect('/')
+            self.redirect('/login')
 
         subject = self.request.get('subject')
         content = self.request.get('content')
@@ -241,7 +250,7 @@ class NewPost(BlogHandler):
             p.put()
             self.redirect('/%s' % str(p.key().id()))
         else:
-            error = "subject and content, please!"
+            error = "Subject and Content, Please!"
             self.render("newpost.html", subject=subject, content=content,
                         error=error)
 
@@ -259,7 +268,8 @@ class EditExistingPost(BlogHandler):
         if self.user.name == post.postuser:
             self.render("edit.html", post=post)
         else:
-            self.write("You do not have permissions to edit this post")
+            error = "You are not allowed to edit this post!"
+            self.render("edit.html", post = post, error=error)
 
     def post(self, post_id):
         key = db.Key.from_path('Post', int(post_id), parent=blog_key())
@@ -268,19 +278,21 @@ class EditExistingPost(BlogHandler):
             self.error(404)
             return
         if not self.user:
-            self.redirect("/")
+            self.redirect("/login")
             return
         if self.user.name != post.postuser:
-            self.write("You do not have permissions to edit this post")
+            self.redirect('/%s' % int(post.key().id()))
             return
         subject = self.request.get('subject')
         content = self.request.get('content')
         if subject and content:
-
             post.subject = subject
             post.content = content
             post.put()
-            self.redirect("/")
+            self.redirect('/%s' % int(post.key().id()))
+        else:
+            error = "Subject and Content Please!"
+            self.render("edit.html", post = post, error=error)
 
 
 class DeleteExistingPost(BlogHandler):
@@ -297,7 +309,7 @@ class DeleteExistingPost(BlogHandler):
             post.delete()
             self.redirect("/")
         else:
-            self.write("You do not have permissions to delete this post")
+            self.redirect("/")
 
 
 class LikesForPost(db.Model):
@@ -320,8 +332,11 @@ class LikePost(BlogHandler):
             return
         key = db.Key.from_path('Post', int(post_id), parent=blog_key())
         post = db.get(key)
+        if not post:
+            self.error(404)
+            return
         if self.user.name == post.postuser:
-            self.write("You do not have permissions to like your own post")
+            self.redirect('/%s' % int(post.key().id()))
             return
         post_id = int(post.key().id())
         like_post_id = post_id
@@ -347,8 +362,11 @@ class UnlikePost(BlogHandler):
 
         key = db.Key.from_path('Post', int(post_id), parent=blog_key())
         post = db.get(key)
+        if not post:
+            self.error(404)
+            return
         if self.user.name == post.postuser:
-            self.write("You do not have permissions to unlike your own post")
+            self.redirect('/%s' % int(post.key().id()))
             return
         post_id = int(post.key().id())
         like_post_id = post_id
@@ -369,7 +387,7 @@ class MostLikedPost(BlogHandler):
         if p:
             self.render("mostliked.html", post=p)
         else:
-            self.write("No posts")
+            self.redirect("/")
 
 
 class PostMaxComments(BlogHandler):
@@ -378,7 +396,7 @@ class PostMaxComments(BlogHandler):
         if p:
             self.render("maxcomments.html", post=p)
         else:
-            self.write("No posts")
+            self.redirect("/")
 
 
 class searchpost(BlogHandler):
@@ -389,7 +407,7 @@ class searchpost(BlogHandler):
         sub = self.request.get("subject")
         p = Post.all().filter("subject = ", sub)
         if not p:
-            self.write("Sorry, this post does not exist")
+            self.render("searchpost.html")
             return
         self.render("searchpost.html", post=p)
 
@@ -399,6 +417,9 @@ class ChangeComment(BlogHandler):
         postkey = db.Key.from_path('Post', int(post_id), parent=blog_key())
         post = db.get(postkey)
         c = Comment.get_by_id(comment_id, postkey)
+        if not c or not post:
+            self.error(404)
+            return
         if not self.user:
             self.redirect("/login")
             return
@@ -411,6 +432,9 @@ class ChangeComment(BlogHandler):
         postkey = db.Key.from_path('Post', int(post_id), parent=blog_key())
         post = db.get(postkey)
         c = Comment.get_by_id(comment_id, postkey)
+        if not c or not post:
+            self.error(404)
+            return
         if not self.user:
             self.redirect("/login")
             return
@@ -428,6 +452,9 @@ class DeleteComment(BlogHandler):
         postkey = db.Key.from_path('Post', int(post_id), parent=blog_key())
         post = db.get(postkey)
         c = Comment.get_by_id(comment_id, postkey)
+        if not c or not post:
+            self.error(404)
+            return
         if not self.user:
             self.redirect("/login")
             return
