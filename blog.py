@@ -1,3 +1,4 @@
+""" imports for the project """
 import os
 import re
 import random
@@ -9,6 +10,8 @@ import jinja2
 
 from google.appengine.ext import db
 
+
+"""Helper Functions"""
 template_dir = os.path.join(os.path.dirname(__file__), 'templates')
 jinja_env = jinja2.Environment(loader=jinja2.FileSystemLoader(template_dir),
                                autoescape=True)
@@ -31,6 +34,46 @@ def check_secure_val(secure_val):
         return val
 
 
+def make_salt(length=5):
+    return ''.join(random.choice(letters) for x in xrange(length))
+
+
+def make_pw_hash(name, pw, salt=None):
+    if not salt:
+        salt = make_salt()
+    h = hashlib.sha256(name + pw + salt).hexdigest()
+    return '%s,%s' % (salt, h)
+
+
+def valid_pw(name, password, h):
+    salt = h.split(',')[0]
+    return h == make_pw_hash(name, password, salt)
+
+
+def users_key(group='default'):
+    return db.Key.from_path('users', group)
+
+
+def blog_key(name='default'):
+    return db.Key.from_path('blogs', name)
+
+
+def valid_username(username):
+    USER_RE = re.compile(r"^[a-zA-Z0-9_-]{3,20}$")
+    return username and USER_RE.match(username)
+
+
+def valid_password(password):
+    PASS_RE = re.compile(r"^.{3,20}$")
+    return password and PASS_RE.match(password)
+
+
+def valid_email(email):
+    EMAIL_RE = re.compile(r'^[\S]+@[\S]+\.[\S]+$')
+    return not email or EMAIL_RE.match(email)
+
+
+"""Handler for blog"""
 class BlogHandler(webapp2.RequestHandler):
     def write(self, *a, **kw):
         self.response.out.write(*a, **kw)
@@ -64,27 +107,7 @@ class BlogHandler(webapp2.RequestHandler):
         self.user = uid and User.by_id(int(uid))
 
 
-# user stuff
-def make_salt(length=5):
-    return ''.join(random.choice(letters) for x in xrange(length))
-
-
-def make_pw_hash(name, pw, salt=None):
-    if not salt:
-        salt = make_salt()
-    h = hashlib.sha256(name + pw + salt).hexdigest()
-    return '%s,%s' % (salt, h)
-
-
-def valid_pw(name, password, h):
-    salt = h.split(',')[0]
-    return h == make_pw_hash(name, password, salt)
-
-
-def users_key(group='default'):
-    return db.Key.from_path('users', group)
-
-
+"""User Model for maintaining user data"""
 class User(db.Model):
     name = db.StringProperty(required=True)
     pw_hash = db.StringProperty(required=True)
@@ -115,12 +138,7 @@ class User(db.Model):
             return u
 
 
-# blog stuff
-
-def blog_key(name='default'):
-    return db.Key.from_path('blogs', name)
-
-
+"""Post Model to maintain posts"""
 class Post(db.Model):
     subject = db.StringProperty(required=True)
     content = db.TextProperty(required=True)
@@ -134,15 +152,7 @@ class Post(db.Model):
         return render_str("post.html", p=self)
 
 
-class BlogFront(BlogHandler):
-    def get(self):
-        posts = greetings = Post.all().order('-created')
-        if self.user:
-            self.render('front.html', posts=posts, uname=self.user.name)
-        else:
-            self.render('front.html', posts=posts)
-
-
+"""Comment Model for comments"""
 class Comment(db.Model):
     comment = db.StringProperty(required=True)
     comment_user = db.StringProperty(required=True)
@@ -160,6 +170,111 @@ class Comment(db.Model):
             return False
 
 
+"""Model for Likes"""
+class LikesForPost(db.Model):
+    like_post_id = db.IntegerProperty(required=True)
+    like_user_name = db.StringProperty(required=True)
+
+    @classmethod
+    def Likechecker(cls, like_user_name, like_post_id):
+        check_like = LikesForPost.all()\
+                    .filter('like_user_name =',
+                            like_user_name).filter('like_post_id =',
+                                                   like_post_id).get()
+        return check_like
+
+
+"""Handler for signup"""
+class Signup(BlogHandler):
+    def get(self):
+        self.render("signup-form.html")
+
+    def post(self):
+        have_error = False
+        self.username = self.request.get('username')
+        self.password = self.request.get('password')
+        self.verify = self.request.get('verify')
+        self.email = self.request.get('email')
+
+        params = dict(username=self.username,
+                      email=self.email)
+
+        if not valid_username(self.username):
+            params['error_username'] = "That's not a valid username."
+            have_error = True
+
+        if not valid_password(self.password):
+            params['error_password'] = "That wasn't a valid password."
+            have_error = True
+        elif self.password != self.verify:
+            params['error_verify'] = "Your passwords didn't match."
+            have_error = True
+
+        if not valid_email(self.email):
+            params['error_email'] = "That's not a valid email."
+            have_error = True
+
+        if have_error:
+            self.render('signup-form.html', **params)
+        else:
+            self.done()
+
+    def done(self, *a, **kw):
+        raise NotImplementedError
+
+
+"""Handler for login"""
+class Login(BlogHandler):
+    def get(self):
+        self.render('login-form.html')
+
+    def post(self):
+        username = self.request.get('username')
+        password = self.request.get('password')
+
+        u = User.login(username, password)
+        if u:
+            self.login(u)
+            self.redirect('/')
+        else:
+            msg = 'Invalid login'
+            self.render('login-form.html', error=msg)
+
+
+"""Register class acts as helper for signup"""
+class Register(Signup):
+    def done(self):
+    #make sure the user doesn't already exist
+        u = User.by_name(self.username)
+        if u:
+            msg = 'That user already exists.'
+            self.render('signup-form.html', error_username=msg)
+        else:
+            u = User.register(self.username, self.password, self.email)
+            u.put()
+
+            self.login(u)
+            self.redirect('/')
+
+
+"""Handler for logout"""
+class Logout(BlogHandler):
+    def get(self):
+        self.logout()
+        self.redirect('/')
+
+
+"""Handler for front page of the blog"""
+class BlogFront(BlogHandler):
+    def get(self):
+        posts = greetings = Post.all().order('-created')
+        if self.user:
+            self.render('front.html', posts=posts, uname=self.user.name)
+        else:
+            self.render('front.html', posts=posts)
+
+
+"""Handler for post page"""
 class PostPage(BlogHandler):
     def get(self, post_id):
         key = db.Key.from_path('Post', int(post_id), parent=blog_key())
@@ -177,6 +292,7 @@ class PostPage(BlogHandler):
             self.render("post.html", post=post, comment=comment)
 
 
+"""Handlers for comment start"""
 class AddCommentToPost(BlogHandler):
     def get(self, post_id):
         key = db.Key.from_path('Post', int(post_id), parent=blog_key())
@@ -228,188 +344,6 @@ class ViewComment(BlogHandler):
         else:
             self.render("viewcomment.html", post=post, comment=comment,
                         user=self.user.name)
-
-
-class NewPost(BlogHandler):
-    def get(self):
-        if self.user:
-            self.render("newpost.html")
-        else:
-            self.redirect("/login")
-
-    def post(self):
-        if not self.user:
-            self.redirect('/login')
-
-        subject = self.request.get('subject')
-        content = self.request.get('content')
-
-        if subject and content:
-            p = Post(parent=blog_key(), subject=subject, content=content,
-                     postuser=self.user.name)
-            p.put()
-            self.redirect('/%s' % str(p.key().id()))
-        else:
-            error = "Subject and Content, Please!"
-            self.render("newpost.html", subject=subject, content=content,
-                        error=error)
-
-
-class EditExistingPost(BlogHandler):
-    def get(self, post_id):
-        key = db.Key.from_path('Post', int(post_id), parent=blog_key())
-        post = db.get(key)
-        if not post:
-            self.error(404)
-            return
-        if not self.user:
-            self.redirect("/")
-            return
-        if self.user.name == post.postuser:
-            self.render("edit.html", post=post)
-        else:
-            error = "You are not allowed to edit this post!"
-            self.render("edit.html", post = post, error=error)
-
-    def post(self, post_id):
-        key = db.Key.from_path('Post', int(post_id), parent=blog_key())
-        post = db.get(key)
-        if not post:
-            self.error(404)
-            return
-        if not self.user:
-            self.redirect("/login")
-            return
-        if self.user.name != post.postuser:
-            self.redirect('/%s' % int(post.key().id()))
-            return
-        subject = self.request.get('subject')
-        content = self.request.get('content')
-        if subject and content:
-            post.subject = subject
-            post.content = content
-            post.put()
-            self.redirect('/%s' % int(post.key().id()))
-        else:
-            error = "Subject and Content Please!"
-            self.render("edit.html", post = post, error=error)
-
-
-class DeleteExistingPost(BlogHandler):
-    def get(self, post_id):
-        key = db.Key.from_path('Post', int(post_id), parent=blog_key())
-        post = db.get(key)
-        if not post:
-            self.error(404)
-            return
-        if not self.user:
-            self.redirect("/")
-            return
-        if self.user.name == post.postuser:
-            post.delete()
-            self.redirect("/")
-        else:
-            self.redirect("/")
-
-
-class LikesForPost(db.Model):
-    like_post_id = db.IntegerProperty(required=True)
-    like_user_name = db.StringProperty(required=True)
-
-    @classmethod
-    def Likechecker(cls, like_user_name, like_post_id):
-        check_like = LikesForPost.all()\
-                    .filter('like_user_name =',
-                            like_user_name).filter('like_post_id =',
-                                                   like_post_id).get()
-        return check_like
-
-
-class LikePost(BlogHandler):
-    def get(self, post_id):
-        if not self.user:
-            self.redirect("/login")
-            return
-        key = db.Key.from_path('Post', int(post_id), parent=blog_key())
-        post = db.get(key)
-        if not post:
-            self.error(404)
-            return
-        if self.user.name == post.postuser:
-            self.redirect('/%s' % int(post.key().id()))
-            return
-        post_id = int(post.key().id())
-        like_post_id = post_id
-        like_user_name = self.user.name
-        c = LikesForPost.Likechecker(like_user_name, like_post_id)
-        if c:
-            self.redirect("/")
-        else:
-            like = LikesForPost(parent=key,
-                                like_user_name=self.user.name,
-                                like_post_id=int(post_id))
-            post.postlike = post.postlike+1
-            like.put()
-            post.put()
-            self.redirect("/")
-
-
-class UnlikePost(BlogHandler):
-    def get(self, post_id):
-        if not self.user:
-            self.redirect("/login")
-            return
-
-        key = db.Key.from_path('Post', int(post_id), parent=blog_key())
-        post = db.get(key)
-        if not post:
-            self.error(404)
-            return
-        if self.user.name == post.postuser:
-            self.redirect('/%s' % int(post.key().id()))
-            return
-        post_id = int(post.key().id())
-        like_post_id = post_id
-        like_user_name = self.user.name
-        c = LikesForPost.Likechecker(like_user_name, like_post_id)
-        if c:
-            post.postlike = post.postlike-1
-            c.delete()
-            post.put()
-            self.redirect("/")
-        else:
-            self.redirect("/")
-
-
-class MostLikedPost(BlogHandler):
-    def get(self):
-        p = db.GqlQuery("select * from Post order by postlike desc").get()
-        if p:
-            self.render("mostliked.html", post=p)
-        else:
-            self.redirect("/")
-
-
-class PostMaxComments(BlogHandler):
-    def get(self):
-        p = db.GqlQuery("select * from Post order by postcomment desc").get()
-        if p:
-            self.render("maxcomments.html", post=p)
-        else:
-            self.redirect("/")
-
-
-class searchpost(BlogHandler):
-    def get(self):
-        self.render("search.html")
-
-    def post(self):
-        sub = self.request.get("subject")
-        p = Post.all().filter("subject = ", sub)
-        if not p:
-            self.render("searchpost.html")
-            return
-        self.render("searchpost.html", post=p)
 
 
 class ChangeComment(BlogHandler):
@@ -465,100 +399,183 @@ class DeleteComment(BlogHandler):
             self.redirect("/")
         else:
             self.redirect("/")
-
-USER_RE = re.compile(r"^[a-zA-Z0-9_-]{3,20}$")
-
-
-def valid_username(username):
-    return username and USER_RE.match(username)
-
-PASS_RE = re.compile(r"^.{3,20}$")
+"""Handler for Comments end here"""
 
 
-def valid_password(password):
-    return password and PASS_RE.match(password)
-
-EMAIL_RE = re.compile(r'^[\S]+@[\S]+\.[\S]+$')
-
-
-def valid_email(email):
-    return not email or EMAIL_RE.match(email)
-
-
-class Signup(BlogHandler):
+"""Handler for Posts start here"""
+class NewPost(BlogHandler):
     def get(self):
-        self.render("signup-form.html")
+        if self.user:
+            self.render("newpost.html")
+        else:
+            self.redirect("/login")
 
     def post(self):
-        have_error = False
-        self.username = self.request.get('username')
-        self.password = self.request.get('password')
-        self.verify = self.request.get('verify')
-        self.email = self.request.get('email')
+        if not self.user:
+            self.redirect('/login')
+            return
 
-        params = dict(username=self.username,
-                      email=self.email)
+        subject = self.request.get('subject')
+        content = self.request.get('content')
 
-        if not valid_username(self.username):
-            params['error_username'] = "That's not a valid username."
-            have_error = True
-
-        if not valid_password(self.password):
-            params['error_password'] = "That wasn't a valid password."
-            have_error = True
-        elif self.password != self.verify:
-            params['error_verify'] = "Your passwords didn't match."
-            have_error = True
-
-        if not valid_email(self.email):
-            params['error_email'] = "That's not a valid email."
-            have_error = True
-
-        if have_error:
-            self.render('signup-form.html', **params)
+        if subject and content:
+            p = Post(parent=blog_key(), subject=subject, content=content,
+                     postuser=self.user.name)
+            p.put()
+            self.redirect('/%s' % str(p.key().id()))
         else:
-            self.done()
+            error = "Subject and Content, Please!"
+            self.render("newpost.html", subject=subject, content=content,
+                        error=error)
 
-    def done(self, *a, **kw):
-        raise NotImplementedError
+
+class EditExistingPost(BlogHandler):
+    def get(self, post_id):
+        key = db.Key.from_path('Post', int(post_id), parent=blog_key())
+        post = db.get(key)
+        if not post:
+            self.error(404)
+            return
+        if not self.user:
+            self.redirect("/")
+            return
+        if self.user.name == post.postuser:
+            self.render("edit.html", post=post)
+        else:
+            error = "You are not allowed to edit this post!"
+            self.render("edit.html", post=post, error=error)
+
+    def post(self, post_id):
+        key = db.Key.from_path('Post', int(post_id), parent=blog_key())
+        post = db.get(key)
+        if not post:
+            self.error(404)
+            return
+        if not self.user:
+            self.redirect("/login")
+            return
+        if self.user.name != post.postuser:
+            self.redirect('/%s' % int(post.key().id()))
+            return
+        subject = self.request.get('subject')
+        content = self.request.get('content')
+        if subject and content:
+            post.subject = subject
+            post.content = content
+            post.put()
+            self.redirect('/%s' % int(post.key().id()))
+        else:
+            error = "Subject and Content Please!"
+            self.render("edit.html", post=post, error=error)
 
 
-class Login(BlogHandler):
+class DeleteExistingPost(BlogHandler):
+    def get(self, post_id):
+        key = db.Key.from_path('Post', int(post_id), parent=blog_key())
+        post = db.get(key)
+        if not post:
+            self.error(404)
+            return
+        if not self.user:
+            self.redirect("/")
+            return
+        if self.user.name == post.postuser:
+            post.delete()
+            self.redirect("/")
+        else:
+            self.redirect("/")
+"""Handlers for Post end here"""
+
+
+"""Handlers for Like start here"""
+class LikePost(BlogHandler):
+    def get(self, post_id):
+        if not self.user:
+            self.redirect("/login")
+            return
+        key = db.Key.from_path('Post', int(post_id), parent=blog_key())
+        post = db.get(key)
+        if not post:
+            self.error(404)
+            return
+        if self.user.name == post.postuser:
+            self.redirect('/%s' % int(post.key().id()))
+            return
+        post_id = int(post.key().id())
+        like_post_id = post_id
+        like_user_name = self.user.name
+        c = LikesForPost.Likechecker(like_user_name, like_post_id)
+        if c:
+            self.redirect("/")
+        else:
+            like = LikesForPost(parent=key,
+                                like_user_name=self.user.name,
+                                like_post_id=int(post_id))
+            post.postlike = post.postlike+1
+            like.put()
+            post.put()
+            self.redirect("/")
+
+
+class UnlikePost(BlogHandler):
+    def get(self, post_id):
+        if not self.user:
+            self.redirect("/login")
+            return
+
+        key = db.Key.from_path('Post', int(post_id), parent=blog_key())
+        post = db.get(key)
+        if not post:
+            self.error(404)
+            return
+        if self.user.name == post.postuser:
+            self.redirect('/%s' % int(post.key().id()))
+            return
+        post_id = int(post.key().id())
+        like_post_id = post_id
+        like_user_name = self.user.name
+        c = LikesForPost.Likechecker(like_user_name, like_post_id)
+        if c:
+            post.postlike = post.postlike-1
+            c.delete()
+            post.put()
+            self.redirect("/")
+        else:
+            self.redirect("/")
+"""Handlers for Like end here"""
+
+
+"""Handlers for Extra Functions"""
+class MostLikedPost(BlogHandler):
     def get(self):
-        self.render('login-form.html')
+        p = db.GqlQuery("select * from Post order by postlike desc").get()
+        if p:
+            self.render("mostliked.html", post=p)
+        else:
+            self.redirect("/")
+
+
+class PostMaxComments(BlogHandler):
+    def get(self):
+        p = db.GqlQuery("select * from Post order by postcomment desc").get()
+        if p:
+            self.render("maxcomments.html", post=p)
+        else:
+            self.redirect("/")
+
+
+class searchpost(BlogHandler):
+    def get(self):
+        self.render("search.html")
 
     def post(self):
-        username = self.request.get('username')
-        password = self.request.get('password')
-
-        u = User.login(username, password)
-        if u:
-            self.login(u)
-            self.redirect('/')
-        else:
-            msg = 'Invalid login'
-            self.render('login-form.html', error=msg)
-
-
-class Register(Signup):
-    def done(self):
-        #make sure the user doesn't already exist
-        u = User.by_name(self.username)
-        if u:
-            msg = 'That user already exists.'
-            self.render('signup-form.html', error_username=msg)
-        else:
-            u = User.register(self.username, self.password, self.email)
-            u.put()
-
-            self.login(u)
-            self.redirect('/')
-
-
-class Logout(BlogHandler):
-    def get(self):
-        self.logout()
-        self.redirect('/')
+        sub = self.request.get("subject")
+        p = Post.all().filter("subject = ", sub)
+        if not p:
+            self.render("searchpost.html")
+            return
+        self.render("searchpost.html", post=p)
+"""Handlers for Extra Comments end here"""
 
 
 app = webapp2.WSGIApplication([
